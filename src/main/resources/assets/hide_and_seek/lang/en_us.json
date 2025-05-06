@@ -1,0 +1,7 @@
+{
+  "item.hide_and_seek.shackles": "Кандалы",
+  "item.hide_and_seek.shackles.tooltip": "Сковывает движение всех игроков кроме тебя.\nДействует 10 секунд.",
+  "item.hide_and_seek.falling_star": "Падающая звезда",
+  "item.hide_and_seek.falling_star.tooltip.2": "И ты найдешь то, что ищешь.",
+  "itemGroup.hide_and_seek": "Hide and Seek"
+}

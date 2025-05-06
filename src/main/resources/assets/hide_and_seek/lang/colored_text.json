@@ -1,0 +1,20 @@
+{
+  "item.hide_and_seek.falling_star.tooltip.colored": [
+    {"text":"З","color":"#ffff00"},
+    {"text":"а","color":"#ffd966"},
+    {"text":"г","color":"#ffff00"},
+    {"text":"а","color":"#ffd966"},
+    {"text":"д","color":"#ffff00"},
+    {"text":"а","color":"#ffd966"},
+    {"text":"й","color":"#ffff00"},
+    {"text":" ","color":"#ffd966"},
+    {"text":"ж","color":"#ffff00"},
+    {"text":"е","color":"#ffd966"},
+    {"text":"л","color":"#ffff00"},
+    {"text":"а","color":"#ffd966"},
+    {"text":"н","color":"#ffff00"},
+    {"text":"и","color":"#ffd966"},
+    {"text":"е","color":"#ffff00"},
+    {"text":"!","color":"#ffd966"}
+  ]
+}

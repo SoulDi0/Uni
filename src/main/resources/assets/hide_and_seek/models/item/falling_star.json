@@ -1,0 +1,6 @@
+{
+  "parent": "item/generated",
+  "textures": {
+    "layer0": "hide_and_seek:item/falling_star"
+  }
+}
