@@ -2,6 +2,7 @@ package com.souldi.HideAndSeekMod;
 
 import com.souldi.HideAndSeekMod.entity.ModEntities;
 import com.souldi.HideAndSeekMod.item.ModItems;
+import com.souldi.HideAndSeekMod.network.NetworkHandler;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.ItemStack;
@@ -9,6 +10,7 @@ import net.minecraft.world.item.Items;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -41,9 +43,17 @@ public class HideAndSeekMod {
         // Register entities
         ModEntities.register(modEventBus);
 
+        // Регистрируем обработчик сетевых пакетов
+        modEventBus.addListener(this::setup);
+
         // Register event handlers
         MinecraftForge.EVENT_BUS.register(this);
 
         LOGGER.info("Hide and Seek Mod initialized successfully!");
+    }
+
+    private void setup(final FMLCommonSetupEvent event) {
+        // Регистрация сетевых пакетов должна быть на серверной стороне для синхронизации
+        event.enqueueWork(NetworkHandler::register);
     }
 }

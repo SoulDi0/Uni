@@ -1,0 +1,83 @@
+package com.souldi.HideAndSeekMod.event;
+
+import com.souldi.HideAndSeekMod.HideAndSeekMod;
+import com.souldi.HideAndSeekMod.item.TNTCannonItem;
+import net.minecraft.world.entity.item.PrimedTnt;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.damagesource.DamageSource;
+import net.minecraftforge.event.entity.living.LivingAttackEvent;
+import net.minecraftforge.eventbus.api.EventPriority;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.common.Mod;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+/**
+ * Дополнительный обработчик событий для обеспечения иммунитета к взрывам ТНТ
+ * Этот класс использует другое событие для более надежной защиты
+ */
+@Mod.EventBusSubscriber(modid = HideAndSeekMod.MOD_ID)
+public class ExplosionImmunityHandler {
+
+    private static final Logger LOGGER = LogManager.getLogger();
+
+    /**
+     * Обработчик атаки, который срабатывает раньше, чем урон применяется,
+     * что обеспечивает более надежную защиту от взрывов ТНТ
+     */
+    @SubscribeEvent(priority = EventPriority.HIGHEST)
+    public static void onLivingAttack(LivingAttackEvent event) {
+        // Проверяем, что цель атаки - игрок
+        if (event.getEntity() instanceof Player player) {
+            // Проверяем, что источник урона - взрыв
+            if (event.getSource().isExplosion()) {
+                // Сначала проверяем, есть ли у игрока ТНТ пушка в инвентаре
+                boolean hasTntCannon = playerHasTntCannon(player);
+
+                if (hasTntCannon) {
+                    // Если у игрока есть ТНТ пушка, предоставляем ему иммунитет к взрывам ТНТ
+                    // Проверяем, что источник взрыва - ТНТ
+                    if (isTntExplosion(event.getSource())) {
+                        // Отменяем урон от взрыва ТНТ
+                        event.setCanceled(true);
+                        LOGGER.info("[Extra] Отменен урон от ТНТ для игрока " + player.getName().getString() + " (у игрока есть ТНТ пушка)");
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Проверяет, есть ли у игрока ТНТ пушка в инвентаре
+     */
+    private static boolean playerHasTntCannon(Player player) {
+        // Проверяем основной инвентарь
+        for (ItemStack stack : player.getInventory().items) {
+            if (stack.getItem() instanceof TNTCannonItem) {
+                return true;
+            }
+        }
+
+        // Проверяем предмет в руке
+        for (ItemStack stack : player.getHandSlots()) {
+            if (stack.getItem() instanceof TNTCannonItem) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Проверяет, является ли источник урона взрывом ТНТ
+     */
+    private static boolean isTntExplosion(DamageSource source) {
+        // Проверяем взрыв ТНТ по разным возможным связям
+        return (source.getDirectEntity() instanceof PrimedTnt) ||
+                (source.getEntity() instanceof PrimedTnt) ||
+                (source.isExplosion() &&
+                        (source.getMsgId().equals("explosion") ||
+                                source.getMsgId().equals("explosion.player")));
+    }
+}

@@ -3,5 +3,14 @@
   "item.hide_and_seek.shackles.tooltip": "Сковывает движение всех игроков кроме тебя.\nДействует 10 секунд.",
   "item.hide_and_seek.falling_star": "Падающая звезда",
   "item.hide_and_seek.falling_star.tooltip.2": "И ты найдешь то, что ищешь.",
+  "item.hide_and_seek.falling_star.tooltip.colored": "Загадай желание!",
+  "item.hide_and_seek.laser_pointer": "Лазерная указка",
+  "item.hide_and_seek.laser_pointer.tooltip.2": "Куда укажешь – туда и телепортируешься.",
+  "item.hide_and_seek.tnt_cannon": "ТНТ пушка",
+  "item.hide_and_seek.tnt_cannon.tooltip.1": "Пушка с бесконечным запасом динамитов",
+  "item.hide_and_seek.seeker_drill": "Бур искателя",
+  "item.hide_and_seek.seeker_drill.tooltip.1": "Никто не скроется от тебя...",
+  "item.hide_and_seek.seeker_drill.tooltip.2": "Покрути колесико мыши, чтобы выбрать к кому найти путь.",
+  "item.hide_and_seek.seeker_drill.tooltip.3": "Нажми на ПКМ начать бурить.",
   "itemGroup.hide_and_seek": "Hide and Seek"
 }

@@ -11,46 +11,72 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.Explosion;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.player.Player;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 public class FallingStarEntity extends Entity {
     private static final Logger LOGGER = LogManager.getLogger();
 
     private int lifetime = 0;
-    private int maxLifetime = 400; // Увеличенное время жизни (20 секунд)
+    private int maxLifetime = 400; // 20 секунд при 20 тиках в секунду
     private Vec3 targetPos; // Позиция цели
     private double targetY; // Высота цели (игрока)
     private boolean hasImpacted = false;
-    private double fallSpeed = 0.7D; // Увеличенная скорость падения
+    private double fallSpeed = 0.7D; // Скорость падения
+    private UUID targetPlayerUUID; // UUID игрока-цели
+
+    // Смещение по Y для остановки звезды выше уровня игрока
+    private static final int STOP_HEIGHT_ABOVE_PLAYER = 3;
+
+    // Переменные для отслеживания пути движения
+    private List<BlockPos> destroyedBlocks = new ArrayList<>();
+    private int blockDestroyTick = 0;
+    private static final int DESTROY_FREQUENCY = 1; // Проверка блоков каждый тик
+
+    // Параметры звезды
+    private static final int STAR_POINTS = 5; // 5-конечная звезда
+    private static final int MAIN_RADIUS = 8; // Большой радиус (лучи звезды)
+    private static final int INNER_RADIUS = 3; // Внутренний радиус (между лучами)
+    private static final int VERTICAL_RANGE = 2; // Вертикальный диапазон звезды
 
     public FallingStarEntity(EntityType<? extends FallingStarEntity> entityType, Level level) {
         super(entityType, level);
         this.noPhysics = true; // Отключаем физику столкновений
+
+        // Установим стандартное движение вниз (на случай, если targetPos не инициализирован)
+        this.setDeltaMovement(0, -fallSpeed, 0);
     }
 
-    public FallingStarEntity(Level level, double x, double y, double z, Vec3 targetPos) {
+    public FallingStarEntity(Level level, double x, double y, double z, Vec3 targetPos, UUID targetPlayerUUID) {
         this(ModEntities.FALLING_STAR.get(), level);
+
+        // Точно в позицию игрока
         this.setPos(x, y, z);
         this.targetPos = targetPos;
-        this.targetY = targetPos.y; // Запоминаем высоту цели
 
-        // Рассчитываем вектор направления к цели
+        // Устанавливаем высоту цели на STOP_HEIGHT_ABOVE_PLAYER блоков выше игрока
+        this.targetY = targetPos.y + STOP_HEIGHT_ABOVE_PLAYER;
+        this.targetPlayerUUID = targetPlayerUUID; // Запоминаем UUID игрока-цели
+
+        // Рассчитываем вектор направления точно к цели
         Vec3 direction = targetPos.subtract(x, y, z).normalize();
 
-        // Устанавливаем скорость движения, преимущественно вниз
+        // Устанавливаем скорость движения
         this.setDeltaMovement(
-                direction.x * fallSpeed * 0.5, // Снижаем горизонтальную скорость
-                -fallSpeed, // Увеличиваем вертикальную скорость (вниз)
-                direction.z * fallSpeed * 0.5  // Снижаем горизонтальную скорость
+                direction.x * fallSpeed,
+                direction.y * fallSpeed,
+                direction.z * fallSpeed
         );
 
-        LOGGER.info("Created FallingStarEntity at " + x + ", " + y + ", " + z + " targeting " + targetPos);
+        LOGGER.info("Created FallingStarEntity at " + x + ", " + y + ", " + z + " targeting " + targetPos + " for player " + targetPlayerUUID);
     }
 
     @Override
@@ -66,11 +92,20 @@ public class FallingStarEntity extends Entity {
             double tz = tag.getDouble("TargetZ");
             this.targetPos = new Vec3(tx, ty, tz);
             this.targetY = ty;
+        } else {
+            // Если информация о цели отсутствует, устанавливаем движение вниз
+            this.targetPos = null;
+            this.targetY = this.getY() - 10.0; // Просто 10 блоков ниже текущей позиции
+            this.setDeltaMovement(0, -fallSpeed, 0);
         }
 
         this.lifetime = tag.getInt("Lifetime");
         this.maxLifetime = tag.getInt("MaxLifetime");
         this.hasImpacted = tag.getBoolean("HasImpacted");
+
+        if (tag.hasUUID("TargetPlayerUUID")) {
+            this.targetPlayerUUID = tag.getUUID("TargetPlayerUUID");
+        }
     }
 
     @Override
@@ -84,6 +119,10 @@ public class FallingStarEntity extends Entity {
         tag.putInt("Lifetime", this.lifetime);
         tag.putInt("MaxLifetime", this.maxLifetime);
         tag.putBoolean("HasImpacted", this.hasImpacted);
+
+        if (this.targetPlayerUUID != null) {
+            tag.putUUID("TargetPlayerUUID", this.targetPlayerUUID);
+        }
     }
 
     @Override
@@ -106,32 +145,33 @@ public class FallingStarEntity extends Entity {
 
         // Обрабатываем движение звезды только если она не столкнулась
         if (!this.hasImpacted) {
-            // Запоминаем предыдущую позицию для частиц
-            double prevX = this.getX();
-            double prevY = this.getY();
-            double prevZ = this.getZ();
+            // Получаем текущую позицию перед движением
+            BlockPos currentBlockPos = new BlockPos(this.getX(), this.getY(), this.getZ());
 
             // Перемещаем сущность
             this.move(MoverType.SELF, this.getDeltaMovement());
 
-            // Добавляем частицы следа
-            for (int i = 0; i < 5; i++) {
-                double trailX = prevX + (this.getX() - prevX) * (i / 5.0);
-                double trailY = prevY + (this.getY() - prevY) * (i / 5.0);
-                double trailZ = prevZ + (this.getZ() - prevZ) * (i / 5.0);
-
-                this.level.addParticle(
-                        ParticleTypes.FLAME,
-                        trailX, trailY, trailZ,
-                        0.0, 0.0, 0.0
-                );
+            // Проверяем достижение высоты цели
+            if (this.getY() <= this.targetY) {
+                LOGGER.info("Star reached target height: " + this.getY() + " <= " + this.targetY);
+                impact();
+                return;
             }
 
-            // Проверяем достижение высоты игрока
-            if (this.getY() <= this.targetY + 1.0) {
-                LOGGER.info("Star reached target height: " + this.getY() + " <= " + (this.targetY + 1.0));
-                this.impact();
-                return;
+            // Разрушаем блоки по пути каждые DESTROY_FREQUENCY тиков
+            blockDestroyTick++;
+            if (blockDestroyTick >= DESTROY_FREQUENCY) {
+                blockDestroyTick = 0;
+
+                // Разрушаем блоки в форме 5-конечной звезды по пути движения
+                destroyBlocksInStarPattern(currentBlockPos);
+
+                // Добавляем частицы для визуального эффекта
+                if (!level.isClientSide && level instanceof ServerLevel serverLevel) {
+                    serverLevel.sendParticles(ParticleTypes.FLAME,
+                            this.getX(), this.getY(), this.getZ(),
+                            10, 0.5, 0.5, 0.5, 0.01);
+                }
             }
 
             // Проверяем столкновение с блоками
@@ -140,36 +180,104 @@ public class FallingStarEntity extends Entity {
 
             if (!blockState.isAir()) {
                 LOGGER.info("Star hit a block: " + blockState.getBlock().getName().getString());
+
+                // Получаем высоту игрока
+                Player targetPlayer = getTargetPlayer();
+                if (targetPlayer != null) {
+                    double playerY = targetPlayer.getY() + STOP_HEIGHT_ABOVE_PLAYER;
+
+                    // Если звезда опустилась ниже заданной высоты над игроком, останавливаем её
+                    if (this.getY() <= playerY) {
+                        LOGGER.info("Star stopped above player: " + this.getY() + " <= " + playerY);
+                        impact();
+                        return;
+                    }
+                }
+
                 // Разрушаем блок при столкновении
-                destroyBlocks();
-                // Если это не последний блок до цели, просто двигаемся дальше
-                if (this.getY() > this.targetY + 3.0) {
+                destroyBlocksInStarPattern(blockPos);
+
+                // Проверяем, находимся ли мы еще далеко от цели
+                double distanceToTarget = (targetPos != null)
+                        ? new Vec3(this.getX(), this.getY(), this.getZ()).distanceTo(targetPos)
+                        : 0; // Если targetPos == null, считаем что мы близко к цели
+
+                if (targetPos != null && distanceToTarget > 3.0) {
+                    // Если далеко от цели, пересчитываем вектор движения для обхода препятствия
+                    Vec3 newDirection = targetPos.subtract(this.getX(), this.getY(), this.getZ()).normalize();
+                    this.setDeltaMovement(
+                            newDirection.x * fallSpeed,
+                            newDirection.y * fallSpeed,
+                            newDirection.z * fallSpeed
+                    );
                     return;
                 }
-                this.impact();
+                impact();
             }
         }
     }
 
     /**
-     * Разрушает блоки в форме звезды вокруг падающей звезды
+     * Находит игрока-цель по UUID
      */
-    private void destroyBlocks() {
-        int radius = 2; // Радиус разрушения
+    private Player getTargetPlayer() {
+        if (targetPlayerUUID != null) {
+            for (Player player : level.players()) {
+                if (player.getUUID().equals(targetPlayerUUID)) {
+                    return player;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Разрушает блоки в форме пятиконечной звезды вокруг указанной позиции
+     */
+    private void destroyBlocksInStarPattern(BlockPos center) {
+        // Создаем список позиций для разрушения
         List<BlockPos> blocksToDestroy = new ArrayList<>();
 
-        BlockPos center = new BlockPos(this.getX(), this.getY(), this.getZ());
+        // Находим и добавляем блоки в форме звезды
+        for (int y = -VERTICAL_RANGE; y <= VERTICAL_RANGE; y++) {
+            for (int x = -MAIN_RADIUS; x <= MAIN_RADIUS; x++) {
+                for (int z = -MAIN_RADIUS; z <= MAIN_RADIUS; z++) {
+                    BlockPos pos = center.offset(x, y, z);
 
-        // Собираем блоки в форме крестообразной звезды
-        for (int x = -radius; x <= radius; x++) {
-            for (int z = -radius; z <= radius; z++) {
-                // Крест (горизонтальные линии)
-                if (x == 0 || z == 0) {
-                    blocksToDestroy.add(center.offset(x, 0, z));
+                    // Пропускаем центр (добавляем отдельно)
+                    if (x == 0 && z == 0 && y == 0) {
+                        blocksToDestroy.add(pos);
+                        continue;
+                    }
 
-                    // Дополнительные блоки для более "звездной" формы
-                    if (Math.abs(x) == 2 && Math.abs(z) == 2) {
-                        blocksToDestroy.add(center.offset(x, 0, z));
+                    // Вычисляем радиальное расстояние от центра
+                    double distance = Math.sqrt(x * x + z * z);
+
+                    // Если точка за пределами максимального радиуса, пропускаем
+                    if (distance > MAIN_RADIUS) continue;
+
+                    // Вычисляем угол в полярных координатах
+                    double angle = Math.atan2(z, x);
+                    // Нормализуем угол в положительный диапазон [0, 2π]
+                    if (angle < 0) angle += 2 * Math.PI;
+
+                    // Вычисляем нормализованный угол в секторе одного луча звезды
+                    double sectorAngle = 2 * Math.PI / STAR_POINTS;
+                    double normalizedAngle = angle % sectorAngle;
+
+                    // Вычисляем пороговое расстояние для данного угла
+                    double threshold;
+                    if (normalizedAngle < sectorAngle / 2) {
+                        // Первая половина сектора - интерполируем от внешнего к внутреннему
+                        threshold = MAIN_RADIUS - (MAIN_RADIUS - INNER_RADIUS) * (normalizedAngle * 2 / sectorAngle);
+                    } else {
+                        // Вторая половина сектора - интерполируем от внутреннего к внешнему
+                        threshold = INNER_RADIUS + (MAIN_RADIUS - INNER_RADIUS) * ((normalizedAngle - sectorAngle/2) * 2 / sectorAngle);
+                    }
+
+                    // Добавляем все блоки внутри звезды
+                    if (distance <= threshold) {
+                        blocksToDestroy.add(pos);
                     }
                 }
             }
@@ -177,18 +285,12 @@ public class FallingStarEntity extends Entity {
 
         // Разрушаем блоки
         for (BlockPos pos : blocksToDestroy) {
-            BlockState blockState = this.level.getBlockState(pos);
-            if (!blockState.isAir() && blockState.getDestroySpeed(level, pos) >= 0
-                    && level.getBlockEntity(pos) == null) {
-                level.destroyBlock(pos, false);
-
-                // Добавляем эффект частиц
-                level.addParticle(
-                        ParticleTypes.EXPLOSION,
-                        pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5,
-                        0.0, 0.0, 0.0
-                );
+            // Пропускаем уже разрушенные блоки
+            if (destroyedBlocks.contains(pos)) {
+                continue;
             }
+
+            breakBlockSafely(pos);
         }
     }
 
@@ -196,36 +298,67 @@ public class FallingStarEntity extends Entity {
         if (!level.isClientSide && !this.hasImpacted) {
             this.hasImpacted = true;
 
-            // Эффект взрыва (без урона)
-            level.explode(
-                    this,
-                    this.getX(), this.getY(), this.getZ(),
-                    3.0F, // Больший радиус взрыва для эффекта
-                    false, // Без огня
-                    Explosion.BlockInteraction.NONE // Не разрушаем блоки взрывом (уже разрушили выше)
-            );
+            // Используем тот же метод разрушения для финального эффекта
+            destroyBlocksInStarPattern(new BlockPos(this.getX(), this.getY(), this.getZ()));
 
-            // Добавляем больше частиц для эффекта
-            for (int i = 0; i < 30; i++) {
-                double offsetX = this.random.nextGaussian() * 0.5;
-                double offsetY = this.random.nextGaussian() * 0.5;
-                double offsetZ = this.random.nextGaussian() * 0.5;
+            // Никакого взрыва, просто небольшой визуальный эффект
+            if (level instanceof ServerLevel serverLevel) {
+                serverLevel.sendParticles(ParticleTypes.EXPLOSION,
+                        this.getX(), this.getY(), this.getZ(),
+                        1, 0.0, 0.0, 0.0, 0.0);
 
-                level.addParticle(
-                        ParticleTypes.EXPLOSION,
-                        this.getX() + offsetX,
-                        this.getY() + offsetY,
-                        this.getZ() + offsetZ,
-                        0.0, 0.0, 0.0
-                );
+                // Добавляем больше эффектных частиц при финальном столкновении
+                serverLevel.sendParticles(ParticleTypes.LAVA,
+                        this.getX(), this.getY(), this.getZ(),
+                        30, 2.0, 0.5, 2.0, 0.1);
+
+                serverLevel.sendParticles(ParticleTypes.FLAME,
+                        this.getX(), this.getY(), this.getZ(),
+                        50, 2.0, 0.5, 2.0, 0.05);
             }
+
+            level.playSound(null, this.getX(), this.getY(), this.getZ(),
+                    net.minecraft.sounds.SoundEvents.AMETHYST_BLOCK_BREAK,
+                    net.minecraft.sounds.SoundSource.BLOCKS,
+                    1.0F, 0.5F);
 
             // Удаляем сущность
             this.discard();
         }
     }
 
-    // Переопределяем bounding box для лучшего рендеринга
+    /**
+     * Безопасно разрушает блок с проверками
+     */
+    private void breakBlockSafely(BlockPos pos) {
+        // Предотвращаем двойное разрушение
+        if (destroyedBlocks.contains(pos)) {
+            return;
+        }
+
+        // Проверяем, можно ли разрушить блок
+        BlockState blockState = this.level.getBlockState(pos);
+        if (!blockState.isAir() &&
+                blockState.getDestroySpeed(level, pos) >= 0 &&
+                level.getBlockEntity(pos) == null) {
+            // Удалена проверка !blockState.is(net.minecraftforge.common.Tags.Blocks.ORES)
+
+            // Отмечаем как разрушенный
+            destroyedBlocks.add(pos);
+
+            // Разрушаем без дропа
+            level.destroyBlock(pos, false);
+
+            // Добавляем случайные частицы для большего эффекта
+            if (!level.isClientSide && level instanceof ServerLevel serverLevel && random.nextFloat() < 0.1) {
+                serverLevel.sendParticles(ParticleTypes.FLAME,
+                        pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5,
+                        1, 0.1, 0.1, 0.1, 0.02);
+            }
+        }
+    }
+
+    // Переопределяем boundingbox для лучшего рендеринга
     @Override
     public AABB getBoundingBoxForCulling() {
         return this.getBoundingBox().inflate(2.0);

@@ -18,7 +18,7 @@ import org.apache.logging.log4j.Logger;
 public class FallingStarRenderer extends EntityRenderer<FallingStarEntity> {
     private static final Logger LOGGER = LogManager.getLogger();
 
-    // Используем правильный путь к текстуре
+    // Путь к текстуре
     private static final ResourceLocation TEXTURE = new ResourceLocation(HideAndSeekMod.MOD_ID, "textures/entity/falling_star.png");
 
     private final FallingStarModel model;
@@ -27,48 +27,46 @@ public class FallingStarRenderer extends EntityRenderer<FallingStarEntity> {
         super(context);
         LOGGER.info("Creating FallingStarRenderer with context: " + context);
         this.model = new FallingStarModel(context.bakeLayer(FallingStarModel.LAYER_LOCATION));
-        this.shadowRadius = 0.5F;
+        this.shadowRadius = 1.5F; // Тень для звезды
     }
 
     @Override
     public void render(FallingStarEntity entity, float entityYaw, float partialTicks, PoseStack poseStack, MultiBufferSource buffer, int packedLight) {
-        // Отладочная информация
-        LOGGER.info("Rendering falling star at: " + entity.getX() + ", " + entity.getY() + ", " + entity.getZ());
-
         poseStack.pushPose();
 
-        // Увеличиваем масштаб для лучшей видимости
-        float scale = 3.0F;
+        // Увеличиваем размер модели в 5 раз
+        float scale = 8.0F;
         poseStack.scale(scale, scale, scale);
 
-        // Перемещаем модель для правильного центрирования
-        poseStack.translate(0, -0.25F, 0);
+        // После анализа модели, определён точный центр: (8, 1, 8)
+        float centerX = 8.0F;
+        float centerY = 1.0F;
+        float centerZ = 8.0F;
 
-        // Вращаем модель для правильной ориентации
-        // Поворачиваем так, чтобы звезда летела горизонтально
-        poseStack.mulPose(Vector3f.YP.rotationDegrees(entity.getYRot()));
-        poseStack.mulPose(Vector3f.XP.rotationDegrees(entity.getXRot()));
+        // Смещаем модель так, чтобы её центр совпадал с центром сущности
+        poseStack.translate(-centerX/16.0F, -centerY/16.0F, -centerZ/16.0F);
 
-        // Добавляем небольшой наклон для эффекта полета
-        poseStack.mulPose(Vector3f.ZP.rotationDegrees(45));
+        // Вращаем модель вокруг вертикальной оси (вращаемся только по оси Y)
+        float rotationSpeed = 0.5F; // Медленное вращение
+        poseStack.mulPose(Vector3f.YP.rotationDegrees(entity.tickCount * rotationSpeed));
 
-        // Получаем время для анимации
-        float ageInTicks = entity.tickCount + partialTicks;
+        // Получаем буфер с эффектом свечения
+        VertexConsumer vertexConsumer = buffer.getBuffer(
+                RenderType.entityTranslucentEmissive(getTextureLocation(entity))
+        );
 
-        // Настройка анимации в модели
-        this.model.setupAnim(entity, 0, 0, ageInTicks, 0, 0);
-
-        // Максимальная яркость для лучшей видимости
+        // Максимальная яркость для эффекта свечения
         int overlayCoords = OverlayTexture.NO_OVERLAY;
-        int lightmapCoord = 15728880; // Полная яркость
-
-        // Выбираем тип рендеринга с эффектом свечения
-        RenderType renderType = RenderType.entityTranslucentEmissive(getTextureLocation(entity));
-        VertexConsumer vertexConsumer = buffer.getBuffer(renderType);
+        int lightmapCoord = 15728880;
 
         // Рендерим модель
-        this.model.renderToBuffer(poseStack, vertexConsumer, lightmapCoord, overlayCoords,
-                1.0F, 1.0F, 0.2F, 1.0F); // Яркий желтый цвет
+        this.model.renderToBuffer(
+                poseStack,
+                vertexConsumer,
+                lightmapCoord,
+                overlayCoords,
+                1.0F, 0.9F, 0.1F, 1.0F
+        );
 
         poseStack.popPose();
         super.render(entity, entityYaw, partialTicks, poseStack, buffer, packedLight);
