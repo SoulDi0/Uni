@@ -1,5 +1,6 @@
 package com.souldi.HideAndSeekMod;
 
+import com.souldi.HideAndSeekMod.entity.DrillSeatEntity;
 import com.souldi.HideAndSeekMod.entity.ModEntities;
 import com.souldi.HideAndSeekMod.item.ModItems;
 import com.souldi.HideAndSeekMod.network.NetworkHandler;
@@ -37,23 +38,18 @@ public class HideAndSeekMod {
 
         IEventBus modEventBus = FMLJavaModLoadingContext.get().getModEventBus();
 
-        // Register items
         ModItems.register(modEventBus);
-
-        // Register entities
         ModEntities.register(modEventBus);
+        DrillSeatEntity.ENTITY_TYPES.register(modEventBus);
 
-        // Регистрируем обработчик сетевых пакетов
         modEventBus.addListener(this::setup);
 
-        // Register event handlers
         MinecraftForge.EVENT_BUS.register(this);
 
         LOGGER.info("Hide and Seek Mod initialized successfully!");
     }
 
     private void setup(final FMLCommonSetupEvent event) {
-        // Регистрация сетевых пакетов должна быть на серверной стороне для синхронизации
         event.enqueueWork(NetworkHandler::register);
     }
 }
