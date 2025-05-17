@@ -7,14 +7,12 @@ import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundAddEntityPacket;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.EntityDimensions;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobCategory;
-import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.vehicle.Boat;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
@@ -45,16 +43,22 @@ public class DrillSeatEntity extends Boat {
     private Vec3 moveDirection = Vec3.ZERO;
     private Vec3 lastPosition = null;
     private Vec3 velocity = Vec3.ZERO;
-    private static final double MOVE_SPEED = 0.5; // Базовая скорость движения
-    private static final double ACCELERATION = 0.1; // Ускорение при старте
-    private static final double DECELERATION = 0.2; // Замедление при приближении к цели
-    private static final double MIN_DISTANCE_TO_TARGET = 2.0; // Минимальное расстояние до цели
-    private static final double MAX_SPEED = 1.2; // Максимальная скорость движения
+    private static final double MOVE_SPEED = 0.5;
+    private static final double ACCELERATION = 0.1;
+    private static final double DECELERATION = 0.2;
+    private static final double MIN_DISTANCE_TO_TARGET = 2.0;
+    private static final double MAX_SPEED = 1.2;
 
-    // Для сглаживания движения
     private double currentSpeed = 0.0;
     private boolean isAccelerating = true;
     private int ticksInMotion = 0;
+
+    private UUID targetPlayerUUID = null;
+    private ServerPlayer cachedTargetPlayer = null;
+    private int targetPlayerUpdateTicks = 0;
+
+    private float originalYHeadRot = 0.0f;
+    private float originalXRot = 0.0f;
 
     public DrillSeatEntity(EntityType<? extends Boat> entityType, Level level) {
         super(entityType, level);
@@ -72,132 +76,197 @@ public class DrillSeatEntity extends Boat {
 
     @Override
     public void tick() {
-        if (this.getPassengers().isEmpty()) {
-            if (!this.level.isClientSide()) {
-                this.discard();
-            }
-            return;
-        }
-
-        // Увеличиваем счетчик тиков в движении
-        ticksInMotion++;
-
-        // Проверяем, активно ли бурение
-        Entity passenger = this.getPassengers().get(0);
-        if (passenger instanceof Player player) {
-            ItemStack drillItem = null;
-
-            if (player.getMainHandItem().getItem() instanceof SeekerDrillItem) {
-                drillItem = player.getMainHandItem();
-            } else if (player.getOffhandItem().getItem() instanceof SeekerDrillItem) {
-                drillItem = player.getOffhandItem();
+        try {
+            if (this.getPassengers().isEmpty()) {
+                if (!this.level.isClientSide()) {
+                    this.discard();
+                }
+                return;
             }
 
-            if (drillItem != null) {
-                CompoundTag tag = drillItem.getOrCreateTag();
-                if (tag.getBoolean("IsActive")) {
-                    // Сохраняем текущую позицию для расчета скорости
-                    if (lastPosition == null) {
-                        lastPosition = this.position();
-                    }
+            ticksInMotion++;
 
-                    // Если бурение активно, получаем целевую позицию из NBT
-                    if (tag.contains("LastPosX") && tag.contains("LastPosY") && tag.contains("LastPosZ")) {
-                        double initialX = tag.getDouble("LastPosX");
-                        double initialY = tag.getDouble("LastPosY");
-                        double initialZ = tag.getDouble("LastPosZ");
+            targetPlayerUpdateTicks++;
 
-                        // Получаем целевую позицию - UUID целевого игрока
-                        if (tag.hasUUID("TargetPlayerUUID")) {
-                            UUID targetUUID = tag.getUUID("TargetPlayerUUID");
-                            ServerPlayer targetPlayer = null;
+            Entity passenger = this.getPassengers().get(0);
+            if (passenger instanceof Player player) {
+                ItemStack drillItem = null;
 
-                            // Находим игрока по UUID
-                            if (!level.isClientSide) {
-                                for (ServerPlayer serverPlayer : ((ServerLevel)level).getServer().getPlayerList().getPlayers()) {
-                                    if (serverPlayer.getUUID().equals(targetUUID)) {
-                                        targetPlayer = serverPlayer;
-                                        break;
-                                    }
-                                }
-                            }
+                if (player.getMainHandItem().getItem() instanceof SeekerDrillItem) {
+                    drillItem = player.getMainHandItem();
+                } else if (player.getOffhandItem().getItem() instanceof SeekerDrillItem) {
+                    drillItem = player.getOffhandItem();
+                }
 
-                            // Если нашли целевого игрока, рассчитываем плавное движение к нему
-                            if (targetPlayer != null) {
-                                Vec3 currentPos = this.position();
-                                Vec3 playerTargetPos = targetPlayer.position();
-                                targetPos = playerTargetPos;
+                if (drillItem != null) {
+                    CompoundTag tag = drillItem.getOrCreateTag();
+                    if (tag.getBoolean("IsActive")) {
 
-                                // Рассчитываем направление к игроку
-                                Vec3 directionToTarget = playerTargetPos.subtract(currentPos).normalize();
-                                moveDirection = directionToTarget;
+                        if (ticksInMotion == 1) {
+                            originalYHeadRot = player.getYHeadRot();
+                            originalXRot = player.getXRot();
+                        }
 
-                                // Рассчитываем расстояние до цели
-                                double distanceToTarget = currentPos.distanceTo(playerTargetPos);
 
-                                // Обновляем тег с последней позицией цели для следующего тика
-                                tag.putDouble("LastPosX", playerTargetPos.x);
-                                tag.putDouble("LastPosY", playerTargetPos.y);
-                                tag.putDouble("LastPosZ", playerTargetPos.z);
+                        if (lastPosition == null) {
+                            lastPosition = this.position();
+                        }
 
-                                // Плавная остановка при приближении к цели
-                                if (distanceToTarget < MIN_DISTANCE_TO_TARGET) {
-                                    // Замедляемся и останавливаемся
-                                    currentSpeed = Math.max(0, currentSpeed - DECELERATION);
 
-                                    // Если почти остановились и близко к цели, останавливаем бурение
-                                    if (currentSpeed < 0.05 && distanceToTarget < 1.5) {
-                                        tag.putBoolean("IsActive", false);
-                                        currentSpeed = 0;
-                                        return;
-                                    }
-                                }
-                                // Плавное ускорение или поддержание скорости
-                                else {
-                                    // В начале движения - плавное ускорение
-                                    if (ticksInMotion < 20) {
-                                        currentSpeed = Math.min(MAX_SPEED, currentSpeed + ACCELERATION);
-                                    }
-                                    // На дальних расстояниях - поддерживаем максимальную скорость
-                                    else if (distanceToTarget > 15) {
-                                        currentSpeed = MAX_SPEED;
-                                    }
-                                    // При приближении к цели - начинаем замедляться
-                                    else if (distanceToTarget < 10) {
-                                        double slowdownFactor = distanceToTarget / 10; // 1.0 на расстоянии 10, 0.5 на расстоянии 5
-                                        currentSpeed = Math.max(MOVE_SPEED, MAX_SPEED * slowdownFactor);
-                                    }
+                        if (tag.contains("LastPosX") && tag.contains("LastPosY") && tag.contains("LastPosZ")) {
+                            double lastPosX = tag.getDouble("LastPosX");
+                            double lastPosY = tag.getDouble("LastPosY");
+                            double lastPosZ = tag.getDouble("LastPosZ");
+
+
+                            if (tag.hasUUID("TargetPlayerUUID")) {
+                                UUID targetUUID = tag.getUUID("TargetPlayerUUID");
+
+
+                                if (targetPlayerUUID == null || !targetPlayerUUID.equals(targetUUID)) {
+                                    targetPlayerUUID = targetUUID;
+                                    cachedTargetPlayer = null;
                                 }
 
-                                // Применяем движение с текущей скоростью
-                                Vec3 movement = moveDirection.scale(currentSpeed);
-                                this.setDeltaMovement(movement);
-                                this.move(net.minecraft.world.entity.MoverType.SELF, this.getDeltaMovement());
+                                ServerPlayer targetPlayer = null;
 
-                                // Сохраняем позицию для следующего расчета
-                                lastPosition = this.position();
+                                if (cachedTargetPlayer == null || targetPlayerUpdateTicks >= 2) {
+                                    if (!level.isClientSide && level instanceof ServerLevel serverLevel) {
+                                        for (ServerPlayer serverPlayer : serverLevel.getServer().getPlayerList().getPlayers()) {
+                                            if (serverPlayer.getUUID().equals(targetUUID)) {
+                                                targetPlayer = serverPlayer;
+                                                cachedTargetPlayer = serverPlayer;
+                                                targetPlayerUpdateTicks = 0;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    targetPlayer = cachedTargetPlayer;
+                                }
 
-                                // Не выполняем обычную физику для лодки в режиме бурения
-                                return;
+                                if (targetPlayer != null) {
+                                    Vec3 currentPos = this.position();
+                                    Vec3 playerTargetPos = targetPlayer.position();
+                                    targetPos = playerTargetPos;
+
+                                    Vec3 directionToTarget = playerTargetPos.subtract(currentPos).normalize();
+                                    moveDirection = directionToTarget;
+
+                                    double distanceToTarget = currentPos.distanceTo(playerTargetPos);
+
+                                    tag.putDouble("LastPosX", playerTargetPos.x);
+                                    tag.putDouble("LastPosY", playerTargetPos.y);
+                                    tag.putDouble("LastPosZ", playerTargetPos.z);
+
+                                    updatePlayerBodyOrientation(player, directionToTarget);
+
+                                    if (distanceToTarget < MIN_DISTANCE_TO_TARGET) {
+                                        currentSpeed = Math.max(0, currentSpeed - DECELERATION);
+
+                                        if (currentSpeed < 0.05 && distanceToTarget < 1.5) {
+                                            tag.putBoolean("IsActive", false);
+                                            currentSpeed = 0;
+                                            return;
+                                        }
+                                    }
+                                    else {
+                                        if (ticksInMotion < 20) {
+                                            currentSpeed = Math.min(MAX_SPEED, currentSpeed + ACCELERATION);
+                                        }
+                                        else if (distanceToTarget > 15) {
+                                            currentSpeed = MAX_SPEED;
+                                        }
+                                        else if (distanceToTarget < 10) {
+                                            double slowdownFactor = distanceToTarget / 10;
+                                            currentSpeed = Math.max(MOVE_SPEED, MAX_SPEED * slowdownFactor);
+                                        }
+                                    }
+
+                                    Vec3 movement = moveDirection.scale(currentSpeed);
+                                    this.setDeltaMovement(movement);
+                                    this.move(net.minecraft.world.entity.MoverType.SELF, this.getDeltaMovement());
+
+                                    lastPosition = this.position();
+
+                                    return;
+                                }
                             }
                         }
+                    } else {
+                        currentSpeed = 0;
+                        ticksInMotion = 0;
+                        targetPlayerUUID = null;
+                        cachedTargetPlayer = null;
                     }
-                } else {
-                    // Если бурение не активно, сбрасываем скорость и счетчики
-                    currentSpeed = 0;
-                    ticksInMotion = 0;
                 }
             }
+
+            targetPos = null;
+            moveDirection = Vec3.ZERO;
+            currentSpeed = 0;
+            ticksInMotion = 0;
+            targetPlayerUUID = null;
+            cachedTargetPlayer = null;
+
+            super.tick();
+        } catch (Exception e) {
+            LOGGER.error("Ошибка в DrillSeatEntity.tick(): " + e.getMessage(), e);
+
+            targetPos = null;
+            moveDirection = Vec3.ZERO;
+            currentSpeed = 0;
+            ticksInMotion = 0;
+            targetPlayerUUID = null;
+            cachedTargetPlayer = null;
+
+            super.tick();
         }
+    }
 
-        // Сбрасываем параметры движения, если не в режиме бурения
-        targetPos = null;
-        moveDirection = Vec3.ZERO;
-        currentSpeed = 0;
-        ticksInMotion = 0;
+    private void updatePlayerBodyOrientation(Player player, Vec3 directionToTarget) {
+        try {
+            float targetYaw = (float) Math.toDegrees(Math.atan2(-directionToTarget.x, directionToTarget.z));
 
-        // Вызываем стандартную обработку родителя для коллизий и гравитации, если не в режиме бурения
-        super.tick();
+            this.setYRot(targetYaw);
+
+            player.setYRot(targetYaw);
+
+            player.setXRot(90.0F);
+
+            player.setYBodyRot(targetYaw);
+
+            if (!level.isClientSide && player instanceof ServerPlayer serverPlayer) {
+                CompoundTag playerData = serverPlayer.getPersistentData();
+                CompoundTag drillData = new CompoundTag();
+
+                drillData.putBoolean("IsDrilling", true);
+                drillData.putFloat("BodyYaw", targetYaw);
+                drillData.putBoolean("AllowHeadMovement", true);
+
+                playerData.put("DrillData", drillData);
+            }
+        } catch (Exception e) {
+            LOGGER.error("Ошибка в DrillSeatEntity.updatePlayerBodyOrientation(): " + e.getMessage(), e);
+        }
+    }
+
+    private float normalizeAngle(float angle) {
+        angle = angle % 360;
+        if (angle > 180) {
+            angle -= 360;
+        } else if (angle < -180) {
+            angle += 360;
+        }
+        return angle;
+    }
+
+    public Vec3 getMoveDirection() {
+        return moveDirection;
+    }
+
+    public UUID getTargetPlayerUUID() {
+        return targetPlayerUUID;
     }
 
     @Override
@@ -222,7 +291,7 @@ public class DrillSeatEntity extends Boat {
 
     @Override
     public boolean isNoGravity() {
-        // Проверяем, активно ли бурение у игрока на сиденье
+
         if (!this.getPassengers().isEmpty() && this.getPassengers().get(0) instanceof Player player) {
             ItemStack mainHand = player.getMainHandItem();
             ItemStack offHand = player.getOffhandItem();
@@ -231,18 +300,18 @@ public class DrillSeatEntity extends Boat {
                     offHand.getItem() instanceof SeekerDrillItem;
 
             if (holdingDrill) {
-                // Проверяем, активно ли бурение
+
                 CompoundTag tag = mainHand.getItem() instanceof SeekerDrillItem ?
                         mainHand.getOrCreateTag() : offHand.getOrCreateTag();
 
                 if (tag.getBoolean("IsActive")) {
-                    // Если бурение активно, отключаем гравитацию
+
                     return true;
                 }
             }
         }
 
-        // По умолчанию гравитация включена
+
         return false;
     }
 

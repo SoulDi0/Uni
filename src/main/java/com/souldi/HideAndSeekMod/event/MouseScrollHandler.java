@@ -12,9 +12,6 @@ import net.minecraftforge.fml.common.Mod;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-/**
- * Обработчик прокрутки колесика мыши для SeekerDrillItem
- */
 @Mod.EventBusSubscriber(modid = HideAndSeekMod.MOD_ID, value = Dist.CLIENT)
 public class MouseScrollHandler {
     private static final Logger LOGGER = LogManager.getLogger();
@@ -27,18 +24,14 @@ public class MouseScrollHandler {
             return;
         }
 
-        // Проверяем, держит ли игрок бур в руке
         ItemStack mainHandItem = player.getMainHandItem();
 
         if (mainHandItem.getItem() instanceof SeekerDrillItem drillItem) {
-            // Получаем направление прокрутки (положительное - вверх, отрицательное - вниз)
             double scrollDelta = event.getScrollDelta();
 
-            // Передаем событие прокрутки в бур
             boolean handled = drillItem.onScroll(
                     mainHandItem, player, (int) Math.signum(scrollDelta));
 
-            // Если обработано, отменяем базовое событие
             if (handled) {
                 event.setCanceled(true);
             }

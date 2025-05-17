@@ -24,7 +24,7 @@ public class ModItems {
     public static final RegistryObject<Item> LASER_POINTER = ITEMS.register("laser_pointer",
             () -> new LaserPointerItem(new Item.Properties()
                     .tab(HideAndSeekMod.HIDE_AND_SEEK_TAB)
-                    .stacksTo(1)));  // Убрана durability, так как предмет неразрушимый
+                    .stacksTo(1)));
 
     public static final RegistryObject<Item> TNT_CANNON = ITEMS.register("tnt_cannon",
             () -> new TNTCannonItem(new Item.Properties()

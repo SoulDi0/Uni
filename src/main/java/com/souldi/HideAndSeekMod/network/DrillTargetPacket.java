@@ -13,8 +13,8 @@ import java.util.function.Supplier;
  * Пакет для синхронизации прокрутки бура между клиентом и сервером
  */
 public class DrillTargetPacket {
-    private final UUID dummyUUID; // Это поле не используется, но оставлено для совместимости
-    private final int scrollDirection; // Направление прокрутки: 1 - вперед, -1 - назад
+    private final UUID dummyUUID;
+    private final int scrollDirection;
 
     public DrillTargetPacket(UUID dummyUUID, int scrollDirection) {
         this.dummyUUID = dummyUUID;
@@ -34,18 +34,15 @@ public class DrillTargetPacket {
         NetworkEvent.Context context = contextSupplier.get();
 
         context.enqueueWork(() -> {
-            // Убеждаемся, что мы на серверной стороне
             ServerPlayer player = context.getSender();
 
             if (player == null) {
                 return;
             }
 
-            // Проверяем, держит ли игрок бур в руке
             ItemStack mainHandItem = player.getMainHandItem();
 
             if (mainHandItem.getItem() instanceof SeekerDrillItem drillItem) {
-                // Передаем событие прокрутки в бур
                 drillItem.onScroll(mainHandItem, player, packet.scrollDirection);
             }
         });

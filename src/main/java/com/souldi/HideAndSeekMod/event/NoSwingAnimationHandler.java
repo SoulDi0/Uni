@@ -27,35 +27,29 @@ public class NoSwingAnimationHandler {
         if (event.phase == TickEvent.Phase.START) {
             LocalPlayer player = Minecraft.getInstance().player;
             if (player != null && isHoldingDrill(player)) {
-                // Completely reset animation
                 player.swinging = false;
                 player.swingTime = 0;
             }
         }
     }
 
-    @SubscribeEvent(priority = EventPriority.LOWEST) // Changed to LOWEST so it runs after menu handling
+    @SubscribeEvent(priority = EventPriority.LOWEST)
     @OnlyIn(Dist.CLIENT)
     public static void onMouseInput(InputEvent.MouseButton event) {
         LocalPlayer player = Minecraft.getInstance().player;
         if (player != null && isHoldingDrill(player) && event.getButton() == 0 && event.getAction() == 1) {
-            // Cancel the left click swing animation entirely
             player.swinging = false;
             player.swingTime = 0;
-            // Don't cancel the event completely, as this prevents menu interactions
-            // event.setCanceled(true);
         }
     }
 
-    @SubscribeEvent(priority = EventPriority.NORMAL) // Changed from HIGHEST to NORMAL
+    @SubscribeEvent(priority = EventPriority.NORMAL)
     public static void onLeftClickBlock(PlayerInteractEvent.LeftClickBlock event) {
         Player player = event.getEntity();
         if (isHoldingDrill(player)) {
-            // Cancel the block interaction animation
             player.swinging = false;
             player.swingTime = 0;
 
-            // Only cancel on client side and only if we're not interacting with a GUI
             if (player.level.isClientSide && Minecraft.getInstance().screen == null) {
                 event.setCanceled(true);
             }
@@ -66,23 +60,19 @@ public class NoSwingAnimationHandler {
     public static void onLeftClickEmpty(PlayerInteractEvent.LeftClickEmpty event) {
         Player player = event.getEntity();
         if (isHoldingDrill(player)) {
-            // Cancel the air swing animation
             player.swinging = false;
             player.swingTime = 0;
         }
     }
 
-    // Modify the attack prevention handler to allow menu interaction
-    @SubscribeEvent(priority = EventPriority.NORMAL) // Changed from HIGHEST to NORMAL
+    @SubscribeEvent(priority = EventPriority.NORMAL)
     @OnlyIn(Dist.CLIENT)
     public static void onPrePlayerSwing(net.minecraftforge.client.event.InputEvent.InteractionKeyMappingTriggered event) {
         if (event.isAttack()) {
             LocalPlayer player = Minecraft.getInstance().player;
             if (player != null && isHoldingDrill(player)) {
-                // Just prevent swing animation without canceling the entire event
                 player.swinging = false;
 
-                // Only cancel if we're not interacting with a GUI
                 if (Minecraft.getInstance().screen == null) {
                     event.setCanceled(true);
                 }

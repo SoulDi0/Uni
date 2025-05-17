@@ -18,7 +18,7 @@ import org.apache.logging.log4j.Logger;
 public class FallingStarRenderer extends EntityRenderer<FallingStarEntity> {
     private static final Logger LOGGER = LogManager.getLogger();
 
-    // Путь к текстуре
+
     private static final ResourceLocation TEXTURE = new ResourceLocation(HideAndSeekMod.MOD_ID, "textures/entity/falling_star.png");
 
     private final FallingStarModel model;
@@ -27,39 +27,39 @@ public class FallingStarRenderer extends EntityRenderer<FallingStarEntity> {
         super(context);
         LOGGER.info("Creating FallingStarRenderer with context: " + context);
         this.model = new FallingStarModel(context.bakeLayer(FallingStarModel.LAYER_LOCATION));
-        this.shadowRadius = 1.5F; // Тень для звезды
+        this.shadowRadius = 1.5F;
     }
 
     @Override
     public void render(FallingStarEntity entity, float entityYaw, float partialTicks, PoseStack poseStack, MultiBufferSource buffer, int packedLight) {
         poseStack.pushPose();
 
-        // Увеличиваем размер модели в 5 раз
+
         float scale = 8.0F;
         poseStack.scale(scale, scale, scale);
 
-        // После анализа модели, определён точный центр: (8, 1, 8)
+
         float centerX = 8.0F;
         float centerY = 1.0F;
         float centerZ = 8.0F;
 
-        // Смещаем модель так, чтобы её центр совпадал с центром сущности
+
         poseStack.translate(-centerX/16.0F, -centerY/16.0F, -centerZ/16.0F);
 
-        // Вращаем модель вокруг вертикальной оси (вращаемся только по оси Y)
-        float rotationSpeed = 0.5F; // Медленное вращение
+
+        float rotationSpeed = 0.5F;
         poseStack.mulPose(Vector3f.YP.rotationDegrees(entity.tickCount * rotationSpeed));
 
-        // Получаем буфер с эффектом свечения
+
         VertexConsumer vertexConsumer = buffer.getBuffer(
                 RenderType.entityTranslucentEmissive(getTextureLocation(entity))
         );
 
-        // Максимальная яркость для эффекта свечения
+
         int overlayCoords = OverlayTexture.NO_OVERLAY;
         int lightmapCoord = 15728880;
 
-        // Рендерим модель
+
         this.model.renderToBuffer(
                 poseStack,
                 vertexConsumer,

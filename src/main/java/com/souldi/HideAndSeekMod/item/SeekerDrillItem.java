@@ -38,8 +38,8 @@ import java.util.*;
 public class SeekerDrillItem extends Item {
     private static final Logger LOGGER = LogManager.getLogger();
 
-    private static final int COLOR_RED = 0xFF3300;
-    private static final int COLOR_GRAY = 0x999999;
+    private static final int COLOR_RED = 0x000000;
+    private static final int COLOR_GRAY = 0x70ad47;
 
     private static final String TARGET_PLAYER_KEY = "TargetPlayerUUID";
     private static final String IS_ACTIVE_KEY = "IsActive";
@@ -49,7 +49,7 @@ public class SeekerDrillItem extends Item {
     private static final String SELECTION_MODE = "SelectionMode";
     private static final String SELECTED_INDEX_KEY = "SelectedIndex";
     private static final String USER_UUID_KEY = "UserUUID";
-    private static final String START_TIME_KEY = "DrillStartTime"; // Для отслеживания времени начала бурения
+    private static final String START_TIME_KEY = "DrillStartTime";
 
     private static final int DRILL_RADIUS = 2;
     private static final float FORWARD_DRILL_DISTANCE = 1.5f;
@@ -206,12 +206,12 @@ public class SeekerDrillItem extends Item {
                         tag.putUUID(TARGET_PLAYER_KEY, targetUUID);
                         tag.putBoolean(IS_ACTIVE_KEY, true);
                         tag.putBoolean(SELECTION_MODE, false);
-                        // Сохраняем время начала бурения
+
                         tag.putLong(START_TIME_KEY, level.getGameTime());
 
                         ACTIVE_DRILLING_PLAYERS.add(player.getUUID());
 
-                        // Сохраняем начальную позицию игрока для плавного ускорения
+
                         tag.putDouble(LAST_POSITION_X, player.getX());
                         tag.putDouble(LAST_POSITION_Y, player.getY());
                         tag.putDouble(LAST_POSITION_Z, player.getZ());
@@ -354,7 +354,7 @@ public class SeekerDrillItem extends Item {
         Vec3 direction = targetPos.subtract(playerPos).normalize();
         double distance = playerPos.distanceTo(targetPos);
 
-        // Обработка достижения цели - ближе 2 блоков
+
         if (distance < 2.0) {
             tag.putBoolean(IS_ACTIVE_KEY, false);
             ACTIVE_DRILLING_PLAYERS.remove(player.getUUID());
@@ -382,26 +382,23 @@ public class SeekerDrillItem extends Item {
             return;
         }
 
-        // Для DrillSeatEntity необходимо только обновлять целевую позицию
-        // Обновляем позицию цели в NBT, DrillSeatEntity будет использовать её для движения
+
         tag.putDouble(LAST_POSITION_X, targetPos.x);
         tag.putDouble(LAST_POSITION_Y, targetPos.y);
         tag.putDouble(LAST_POSITION_Z, targetPos.z);
 
-        // Рассчитываем позицию для разрушения блоков впереди
         Vec3 forwardPos = playerPos.add(direction.scale(FORWARD_DRILL_DISTANCE));
         boolean buriedBlocks = drillBlocksInPath(level, playerPos, forwardPos);
 
-        // Генерируем частицы и звуки
-        if (tickCounter % 2 == 0) { // Уменьшаем частоту частиц для оптимизации
+        if (tickCounter % 2 == 0) {
             level.sendParticles(
                     ParticleTypes.CRIT,
                     playerPos.x, playerPos.y, playerPos.z,
-                    5, 0.3, 0.3, 0.3, 0.1 // Меньше частиц для более плавного эффекта
+                    5, 0.3, 0.3, 0.3, 0.1
             );
         }
 
-        if (buriedBlocks && tickCounter % 5 == 0) { // Уменьшаем частоту звуков
+        if (buriedBlocks && tickCounter % 5 == 0) {
             level.playSound(
                     null,
                     playerPos.x, playerPos.y, playerPos.z,
@@ -575,9 +572,9 @@ public class SeekerDrillItem extends Item {
 
     @Override
     public void appendHoverText(ItemStack stack, @Nullable Level level, List<Component> tooltip, net.minecraft.world.item.TooltipFlag flag) {
-        tooltip.add(Component.literal("Никто не скроется от тебя...").withStyle(ChatFormatting.GOLD));
-        tooltip.add(Component.literal("Покрути колесико мыши, чтобы выбрать к кому найти путь.").withStyle(ChatFormatting.GRAY));
-        tooltip.add(Component.literal("Нажми на ПКМ начать бурить.").withStyle(ChatFormatting.YELLOW));
+        tooltip.add(Component.literal("Никто не скроется от тебя...").withStyle(ChatFormatting.WHITE));
+        tooltip.add(Component.literal("Покрути колесико мыши, чтобы выбрать к кому найти путь.").withStyle(ChatFormatting.WHITE));
+        tooltip.add(Component.literal("Нажми на ПКМ начать бурить.").withStyle(ChatFormatting.WHITE));
         super.appendHoverText(stack, level, tooltip, flag);
     }
 }

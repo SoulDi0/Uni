@@ -20,14 +20,12 @@ public class NetworkHandler {
     private static int id = 0;
 
     public static void register() {
-        // Регистрируем пакет для выбора цели
         INSTANCE.registerMessage(id++, DrillTargetPacket.class,
                 DrillTargetPacket::encode,
                 DrillTargetPacket::decode,
                 DrillTargetPacket::handle,
                 Optional.of(NetworkDirection.PLAY_TO_SERVER));
 
-        // Регистрируем пакет для закрытия меню по ЛКМ
         INSTANCE.registerMessage(id++, DrillMenuClosePacket.class,
                 DrillMenuClosePacket::encode,
                 DrillMenuClosePacket::decode,

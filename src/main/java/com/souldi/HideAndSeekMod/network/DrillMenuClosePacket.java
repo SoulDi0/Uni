@@ -17,11 +17,9 @@ public class DrillMenuClosePacket {
     private static final Logger LOGGER = LogManager.getLogger();
 
     public DrillMenuClosePacket() {
-        // Пустой конструктор для десериализации
     }
 
     public void encode(FriendlyByteBuf buf) {
-        // Нет данных для передачи
     }
 
     public static DrillMenuClosePacket decode(FriendlyByteBuf buf) {

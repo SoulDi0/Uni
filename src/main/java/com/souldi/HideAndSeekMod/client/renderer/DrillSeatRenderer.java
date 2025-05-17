@@ -26,6 +26,6 @@ public class DrillSeatRenderer extends EntityRenderer<DrillSeatEntity> {
     @Override
     public void render(DrillSeatEntity entity, float entityYaw, float partialTicks, PoseStack poseStack,
                        MultiBufferSource buffer, int packedLight) {
-        // Не рендерим ничего - делаем сущность полностью невидимой
+
     }
 }
